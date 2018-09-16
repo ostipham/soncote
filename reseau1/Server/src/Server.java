@@ -1,4 +1,5 @@
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
@@ -8,6 +9,8 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.regex.Pattern;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
@@ -15,9 +18,9 @@ import javax.swing.JPanel;
 import javax.swing.JTextField;
 
 public class Server {
-	
 	//credit to Necronet for pattern : https://stackoverflow.com/questions/5667371/validate-ipv4-address-in-java
 	private static final Pattern IP_ADDR_PATTERN = Pattern.compile("^(([01]?\\d\\d?|2[0-4]\\d|25[0-5])\\.){3}([01]?\\d\\d?|2[0-4]\\d|25[0-5])$");
+	private static Folder rootDirectory;
 	
     public static void main(String[] args) throws Exception {
        
@@ -67,6 +70,8 @@ public class Server {
         	listener = new ServerSocket();
         	listener.setReuseAddress(true);
         	listener.bind(new InetSocketAddress(locIP, port));
+        	
+        	rootDirectory = new Folder("root", null);
 
         	System.out.format("The file management server is running on %s:%d%n", serverAddress, port);
     
@@ -82,9 +87,15 @@ public class Server {
 
  
     private static class FileManager extends Thread {
-        private Socket socket;
-        private int clientNumber;
         private static final DateTimeFormatter dateFormat = DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss");
+    	
+    	private Socket socket;
+        private int clientNumber;
+        private PrintWriter out;
+        private BufferedReader in;
+        private boolean isThreadRunning;
+        private Folder currentDirectory;
+        
 
         public FileManager(Socket socket, int clientNumber) {
             this.socket = socket;
@@ -94,19 +105,47 @@ public class Server {
 
         public void run() {
             try {
-
-                BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-                PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
+                in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+                out = new PrintWriter(socket.getOutputStream(), true);
+                isThreadRunning = true;
+                currentDirectory = rootDirectory;
 
                 // Send a welcome message to the client.
                 out.println("Hello, you are client #" + clientNumber + ".");
                 out.println("Enter a command.\n");
-
+                
                 // get client commands
-                while (true) {
+                String[] command;
+                while (isThreadRunning) {
                     String input = in.readLine();
                     LocalDateTime date = LocalDateTime.now();
                     log("[" + socket.getInetAddress() + ":" + socket.getPort() + " - " + dateFormat.format(date) + "]: " + input);
+                    
+                    command = input.split(" ");
+                    
+                    switch(command[0]) {
+                    case "cd" :
+                    	executeCdCommand(command[1]);
+                    	break;
+                    case "ls" :
+                    	executeLsCommand();
+                    	break;
+                    case "mkdir" :
+                    	executeMkdirCommand(command[1]);
+                    	break;
+                    case "upload" :
+                    	executeUploadCommand(command[1]);
+                    	break;
+                    case "download" :
+                    	executeDownloadCommand(command[1]);
+                    	break;
+                    case "exit" :
+                    	executeExitCommand();
+                    	break;
+                    default :
+                    	out.println("That is not a valid command. Please enter a valid command.");
+                    }
+                    command = null;
                 }
             } catch (IOException e) {
                 log("Error handling client# " + clientNumber + ": " + e);
@@ -120,8 +159,97 @@ public class Server {
             }
         }
 
+        //FileManager thread private methods
+        
         private void log(String message) {
             System.out.println(message);
+        }
+        
+        private void executeCdCommand(String argument) {
+        	//checking for valid argument
+        	if (argument == null || argument.equals("")) {
+        		out.println("This is not a valid argument for command cd.");
+        	}
+        	
+        	// command cd .. -> backing up to parent directory (if possible)
+        	if (argument.equals("..") && currentDirectory.getParentDirectory() != null) {
+        		currentDirectory = currentDirectory.getParentDirectory();
+        		return;
+        	}
+        	
+        	//looking for sub directory for name = argument
+        	for (Folder folder : currentDirectory.getChildrenDirectories()) {
+        		if (folder.getFolderName().equals(argument)) {
+        			currentDirectory = folder;
+        			return;
+        		}
+        	}
+        	
+        	//No such sub directory
+        	out.println("Could not find a sub directory called " + argument);
+        }
+        
+        private void executeLsCommand() {
+        	ArrayList<String> names = new ArrayList<String>();
+        	
+        	//get folder names
+        	for (Folder folder : currentDirectory.getChildrenDirectories()) {
+        		names.add(folder.getFolderName());
+        	}
+        	//get file names
+        	for (File file : currentDirectory.getFiles()) {
+        		names.add(file.getName());
+        	}
+        	//sort alphabetically
+        	Collections.sort(names, String.CASE_INSENSITIVE_ORDER);
+        	//send to user
+        	out.println(names.toString());
+        }
+
+        private void executeMkdirCommand(String argument) {
+        	//Cancel command if another client is currently modifying this directory
+        	if (!currentDirectory.isSafeToModify()) {
+        		out.println("Another client is currently modifying this directory. Please try again later.");
+        		return;
+        	} else {
+        		currentDirectory.setSafeToModify(false);
+        	}
+        	
+        	//check if name is valid for a new directory
+        	if (argument == null || argument.equals("")) {
+        		out.println("Enter a non null name for your new directory.");
+        		currentDirectory.setSafeToModify(true);
+        		return;
+        	}
+        	
+        	//check if there is already a sub directory with that name
+        	for (Folder folder : currentDirectory.getChildrenDirectories()) {
+        		if (argument.equals(folder.getFolderName())) {
+        			out.println("There is already a folder with this name in the current directory.\n" +
+        						"Please choose another name or use mkdir command in another directory.");
+        			currentDirectory.setSafeToModify(true);
+        			return;
+        		}
+        	}
+        	
+        	//Conditions cleared. Creating new directory in current one.
+        	currentDirectory.getChildrenDirectories().add(new Folder(argument, currentDirectory));
+        	currentDirectory.setSafeToModify(true);
+        }
+        
+        private void executeUploadCommand(String argument) {
+        	
+        }
+        
+        private void executeDownloadCommand(String argument) {
+        	
+        }
+        
+        private void executeExitCommand() throws IOException {
+        	out.println("Closing connection to server for client " + clientNumber);
+        	out.close();
+        	in.close();
+        	isThreadRunning = false;
         }
     }
 }
