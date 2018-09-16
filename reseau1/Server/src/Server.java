@@ -6,86 +6,107 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
-import javax.swing.JFrame;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.regex.Pattern;
+import javax.swing.JLabel;
 import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JTextField;
 
 public class Server {
-	/**
-     * Application method to run the server runs in an infinite loop
-     * listening on port 5000.  When a connection is requested, it
-     * spawns a new thread to do the servicing and immediately returns
-     * to listening.  The server keeps a unique client number for each
-     * client that connects just to show interesting logging
-     * messages.  It is certainly not necessary to do this.
-     */
+	
+	//credit to Necronet for pattern : https://stackoverflow.com/questions/5667371/validate-ipv4-address-in-java
+	private static final Pattern IP_ADDR_PATTERN = Pattern.compile("^(([01]?\\d\\d?|2[0-4]\\d|25[0-5])\\.){3}([01]?\\d\\d?|2[0-4]\\d|25[0-5])$");
+	
     public static void main(String[] args) throws Exception {
        
         int clientNumber = 0;
+        int port;
+        String serverAddress;
         
-        JFrame frame = new JFrame("Capitalize Server");
+        // Java swing objects for information input box
+        JPanel panel = new JPanel();
+        JTextField ipAddrField = new JTextField(15);
+        JLabel ipAddrLabel = new JLabel("Insert IP address here (format xxx.xxx.xxx.xxx):");
+        JTextField portField = new JTextField(4);
+        JLabel portLabel = new JLabel("Insert port here (between 5000 and 5050):");
+        panel.add(ipAddrLabel);
+        panel.add(ipAddrField);
+        panel.add(portLabel);
+        panel.add(portField);
         
         // Get the server address from a dialog box.
-        String serverAddress = JOptionPane.showInputDialog(frame,"Enter IP Address of the Server:","Welcome to the Capitalization Program", JOptionPane.QUESTION_MESSAGE);
-        int port = 5000;
-        
-		ServerSocket listener;
-		InetAddress locIP = InetAddress.getByName(serverAddress);
-		listener = new ServerSocket();
-		listener.setReuseAddress(true);
-		listener.bind(new InetSocketAddress(locIP, port));
-		
-        System.out.format("The capitalization server is running on %s:%d%n", serverAddress, port);
+        int ok = JOptionPane.showConfirmDialog(null, panel,"Enter Server informations:", JOptionPane.OK_CANCEL_OPTION);    
+        if (ok == JOptionPane.OK_OPTION) {     
+        	serverAddress = ipAddrField.getText();
+        	try {
+        		port = Integer.parseInt(portField.getText());
+        	} catch (NumberFormatException e) {
+        		port = 0;
+        	}
+        	
+        	
+        	// verification loop
+        	while (!(port >= 5000 && port <= 5050 && IP_ADDR_PATTERN.matcher(serverAddress).matches())) {
+        		ok = JOptionPane.showConfirmDialog(null, panel,"Some informations were faulty. Enter Server informations:", 
+        									  	   JOptionPane.OK_CANCEL_OPTION);
+        		if (ok == JOptionPane.CANCEL_OPTION)
+        			return;
+        		serverAddress = ipAddrField.getText();
+        		try {
+            		port = Integer.parseInt(portField.getText());
+            	} catch (NumberFormatException e) {
+            		port = 0;
+            	}
+        	}
+        	
+        	//information is good -> Instantiate listener and start server.
+        	ServerSocket listener;
+        	InetAddress locIP = InetAddress.getByName(serverAddress);
+        	listener = new ServerSocket();
+        	listener.setReuseAddress(true);
+        	listener.bind(new InetSocketAddress(locIP, port));
+
+        	System.out.format("The file management server is running on %s:%d%n", serverAddress, port);
     
-        try {
-            while (true) {
-                new Capitalizer(listener.accept(), clientNumber++).start();
-            }
-        } finally {
-            listener.close();
+        	try {
+        		while (true) {
+        			new FileManager(listener.accept(), clientNumber++).start();
+        		}
+        	} finally {
+        		listener.close();
+        	}
         }
     }
 
-    /**
-     * A private thread to handle capitalization requests on a particular
-     * socket.  The client terminates the dialogue by sending a single line
-     * containing only a period.
-     */
-    private static class Capitalizer extends Thread {
+ 
+    private static class FileManager extends Thread {
         private Socket socket;
         private int clientNumber;
+        private static final DateTimeFormatter dateFormat = DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss");
 
-        public Capitalizer(Socket socket, int clientNumber) {
+        public FileManager(Socket socket, int clientNumber) {
             this.socket = socket;
             this.clientNumber = clientNumber;
             log("New connection with client# " + clientNumber + " at " + socket);
         }
 
-        /**
-         * Services this thread's client by first sending the
-         * client a welcome message then repeatedly reading strings
-         * and sending back the capitalized version of the string.
-         */
         public void run() {
             try {
 
-                // Decorate the streams so we can send characters
-                // and not just bytes.  Ensure output is flushed
-                // after every newline.
                 BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
                 PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
 
                 // Send a welcome message to the client.
                 out.println("Hello, you are client #" + clientNumber + ".");
-                out.println("Enter a line with only a period to quit\n");
+                out.println("Enter a command.\n");
 
-                // Get messages from the client, line by line; return them
-                // capitalized
+                // get client commands
                 while (true) {
                     String input = in.readLine();
-                    if (input == null || input.equals(".")) {
-                        break;
-                    }
-                    out.println(input.toUpperCase());
+                    LocalDateTime date = LocalDateTime.now();
+                    log("[" + socket.getInetAddress() + ":" + socket.getPort() + " - " + dateFormat.format(date) + "]: " + input);
                 }
             } catch (IOException e) {
                 log("Error handling client# " + clientNumber + ": " + e);
@@ -99,10 +120,6 @@ public class Server {
             }
         }
 
-        /**
-         * Logs a simple message.  In this case we just write the
-         * message to the server applications standard output.
-         */
         private void log(String message) {
             System.out.println(message);
         }
