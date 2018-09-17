@@ -20,7 +20,7 @@ import javax.swing.JTextField;
 public class Server {
 	//credit to Necronet for pattern : https://stackoverflow.com/questions/5667371/validate-ipv4-address-in-java
 	private static final Pattern IP_ADDR_PATTERN = Pattern.compile("^(([01]?\\d\\d?|2[0-4]\\d|25[0-5])\\.){3}([01]?\\d\\d?|2[0-4]\\d|25[0-5])$");
-	private static Folder rootDirectory;
+	private static volatile Folder rootDirectory;
 	
     public static void main(String[] args) throws Exception {
        
@@ -187,6 +187,7 @@ public class Server {
         	
         	//No such sub directory
         	out.println("Could not find a sub directory called " + argument);
+        	
         }
         
         private void executeLsCommand() {
@@ -216,7 +217,7 @@ public class Server {
         	}
         	
         	//check if name is valid for a new directory
-        	if (argument == null || argument.equals("")) {
+        	if (argument.equals(null) || argument.equals("")) {
         		out.println("Enter a non null name for your new directory.");
         		currentDirectory.setSafeToModify(true);
         		return;
@@ -252,4 +253,43 @@ public class Server {
         	isThreadRunning = false;
         }
     }
+    
+    private static class CdCommandThread extends Thread {
+    	private Folder currentDirectory;
+    	private String folderName;
+    	private String messageForClient;
+    	
+    	public CdCommandThread(Folder currentDirectory, String folderName, String messageForClient) {
+    		this.currentDirectory = currentDirectory;
+    		this.folderName = folderName;	
+    		this.messageForClient = messageForClient;
+    	}
+    	
+    	public void run() {
+    		//checking for valid argument
+        	if (folderName.equals(null) || folderName.equals("")) {
+        		messageForClient = "This is not a valid argument for command cd.";
+        		return;
+        	}
+        	
+        	// command cd .. -> backing up to parent directory (if possible)
+        	if (folderName.equals("..") && currentDirectory.getParentDirectory() != null) {
+        		currentDirectory = currentDirectory.getParentDirectory();
+        		return;
+        	}
+        	
+        	//looking for sub directory for name = argument
+        	for (Folder folder : currentDirectory.getChildrenDirectories()) {
+        		if (folder.getFolderName().equals(folderName)) {
+        			currentDirectory = folder;
+        			return;
+        		}
+        	}
+        	
+        	//No such sub directory
+        	messageForClient = "Could not find a sub directory called " + folderName;
+    	}
+    }
+    	
+ 
 }

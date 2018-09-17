@@ -18,6 +18,7 @@ public class Client {
     private JTextField dataField = new JTextField(40);
     private JTextArea messageArea = new JTextArea(8, 60);
 
+    private Thread readThread;
     /**
      * Constructs the client by laying out the GUI and registering a
      * listener with the textfield so that pressing Enter in the
@@ -32,29 +33,42 @@ public class Client {
 
         // Add Listeners
         dataField.addActionListener(new ActionListener() {
-            /**
-             * Responds to pressing the enter key in the textfield
-             * by sending the contents of the text field to the
-             * server and displaying the response from the server
-             * in the text area.  If the response is "." we exit
-             * the whole application, which closes all sockets,
-             * streams and windows.
-             */
+          
             public void actionPerformed(ActionEvent e) {
-                out.println(dataField.getText());
-                   String response;
+                
+            	out.println(dataField.getText());
                 try {
-                    response = in.readLine();
-                    if (response == null || response.equals("")) {
-                          System.exit(0);
-                      }
-                } catch (IOException ex) {
-                       response = "Error: " + ex;
+                	readThread = new ReadingThread(in, messageArea);
+                	readThread.start();              	
+                } catch (Exception ex) {
+                       messageArea.append("Error: " + ex + "\n");
                 }
-                messageArea.append(response + "\n");
-                dataField.selectAll();
+                
             }
         });
+        
+    }
+    
+    private static class ReadingThread extends Thread {
+    	private BufferedReader in;
+    	private JTextArea messageArea;
+    	
+    	public ReadingThread(BufferedReader in, JTextArea messageArea) {
+    		this.in= in;
+    		this.messageArea = messageArea;
+    	}
+    	
+    	public void run() {
+    		String response;
+    		try {
+    			response = in.readLine();
+    			messageArea.append(response + "\n");
+    		} catch (IOException e) {
+    			System.out.println("Error in reading thread for client");
+    		}
+    		
+    	}
+    	
     }
 
     /**
