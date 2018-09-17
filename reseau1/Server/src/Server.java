@@ -7,6 +7,9 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -20,7 +23,12 @@ import javax.swing.JTextField;
 public class Server {
 	//credit to Necronet for pattern : https://stackoverflow.com/questions/5667371/validate-ipv4-address-in-java
 	private static final Pattern IP_ADDR_PATTERN = Pattern.compile("^(([01]?\\d\\d?|2[0-4]\\d|25[0-5])\\.){3}([01]?\\d\\d?|2[0-4]\\d|25[0-5])$");
+	
+	//technique class Folder
 	private static volatile Folder rootDirectory;
+	
+	//technique de creation sur disque
+	private static final String rootDirectoryName = "./root";
 	
     public static void main(String[] args) throws Exception {
        
@@ -72,6 +80,10 @@ public class Server {
         	listener.bind(new InetSocketAddress(locIP, port));
         	
         	rootDirectory = new Folder("root", null);
+        	
+        	if (!(Files.exists(Paths.get(rootDirectoryName)) && Files.isDirectory(Paths.get(rootDirectoryName)))) {
+        		Files.createDirectory(Paths.get(rootDirectoryName));
+        	}
 
         	System.out.format("The file management server is running on %s:%d%n", serverAddress, port);
     
@@ -94,7 +106,12 @@ public class Server {
         private PrintWriter out;
         private BufferedReader in;
         private boolean isThreadRunning;
+        
+        //technique de class Folder
         private Folder currentDirectory;
+        
+        //technique de creation sur disque
+        private String currentPath;
         
 
         public FileManager(Socket socket, int clientNumber) {
@@ -109,6 +126,7 @@ public class Server {
                 out = new PrintWriter(socket.getOutputStream(), true);
                 isThreadRunning = true;
                 currentDirectory = rootDirectory;
+                currentPath = rootDirectoryName;
 
                 // Send a welcome message to the client.
                 out.println("Hello, you are client #" + clientNumber + ".");
@@ -166,6 +184,9 @@ public class Server {
         }
         
         private void executeCdCommand(String argument) {
+        	/*
+        	//technique de class Folder
+        	
         	//checking for valid argument
         	if (argument == null || argument.equals("")) {
         		out.println("This is not a valid argument for command cd.");
@@ -188,9 +209,33 @@ public class Server {
         	//No such sub directory
         	out.println("Could not find a sub directory called " + argument);
         	
+            */
+        	//technique de creation sur disque
+        	
+        	//checking for valid argument
+        	if (argument == null || argument.equals("")) {
+        		out.println("This is not a valid argument for command cd.");
+        	}
+        	
+        	// command cd .. -> backing up to parent directory (if possible)
+        	if (argument.equals("..") && currentPath.equals("./root")) {
+        		currentPath = currentPath.substring(0, currentPath.lastIndexOf("/", 0)); //cutting the last "/name" from path
+        		return;
+        	}
+        	
+        	//looking for sub directory for name = argument
+        	if (Files.exists(Paths.get(currentPath + "/" + argument)) && Files.isDirectory(Paths.get(currentPath + "/" + argument))) {
+        		currentPath = currentPath + "/" + argument;
+        		return;
+        	}
+        	
+        	//No such sub directory
+        	out.println("Could not find a sub directory called " + argument);
         }
         
-        private void executeLsCommand() {
+        private void executeLsCommand() throws IOException {
+        	/*
+        	//technique de class Folder
         	ArrayList<String> names = new ArrayList<String>();
         	
         	//get folder names
@@ -205,9 +250,20 @@ public class Server {
         	Collections.sort(names, String.CASE_INSENSITIVE_ORDER);
         	//send to user
         	out.println(names.toString());
+        	*/
+        	
+        	//technique de creation sur disque
+        	ArrayList<String> names = new ArrayList<String>();
+        	
+        	for (Path sub : Files.newDirectoryStream(Paths.get(currentPath))) {
+        		names.add(sub.getFileName().toString());
+        	}
+        	out.println(names.toString());
         }
 
-        private void executeMkdirCommand(String argument) {
+        private void executeMkdirCommand(String argument) throws IOException {
+        	/*
+        	//technique de class Folder
         	//Cancel command if another client is currently modifying this directory
         	if (!currentDirectory.isSafeToModify()) {
         		out.println("Another client is currently modifying this directory. Please try again later.");
@@ -236,9 +292,26 @@ public class Server {
         	//Conditions cleared. Creating new directory in current one.
         	currentDirectory.getChildrenDirectories().add(new Folder(argument, currentDirectory));
         	currentDirectory.setSafeToModify(true);
+        	*/
+        	
+        	//technique de creation sur disque
+        	//check if name is valid for a new directory
+        	if (argument.equals(null) || argument.equals("")) {
+        		out.println("Enter a non null name for your new directory.");
+        		return;
+        	}
+        	
+        	//looking for sub directory for name = argument
+        	if (Files.exists(Paths.get(currentPath + "/" + argument)) && Files.isDirectory(Paths.get(currentPath + "/" + argument))) {
+        		out.println("There is already a subdirectory with that name.");
+        		return;
+        	}
+        	
+        	//Conditions cleared. Creating new directory in current one.
+        	Files.createDirectory(Paths.get(currentPath + "/" + argument));
         }
         
-        private void executeUploadCommand(String argument) {
+        private void executeUploadCommand(String argument) throws IOException {
         	
         }
         
@@ -253,43 +326,5 @@ public class Server {
         	isThreadRunning = false;
         }
     }
-    
-    private static class CdCommandThread extends Thread {
-    	private Folder currentDirectory;
-    	private String folderName;
-    	private String messageForClient;
     	
-    	public CdCommandThread(Folder currentDirectory, String folderName, String messageForClient) {
-    		this.currentDirectory = currentDirectory;
-    		this.folderName = folderName;	
-    		this.messageForClient = messageForClient;
-    	}
-    	
-    	public void run() {
-    		//checking for valid argument
-        	if (folderName.equals(null) || folderName.equals("")) {
-        		messageForClient = "This is not a valid argument for command cd.";
-        		return;
-        	}
-        	
-        	// command cd .. -> backing up to parent directory (if possible)
-        	if (folderName.equals("..") && currentDirectory.getParentDirectory() != null) {
-        		currentDirectory = currentDirectory.getParentDirectory();
-        		return;
-        	}
-        	
-        	//looking for sub directory for name = argument
-        	for (Folder folder : currentDirectory.getChildrenDirectories()) {
-        		if (folder.getFolderName().equals(folderName)) {
-        			currentDirectory = folder;
-        			return;
-        		}
-        	}
-        	
-        	//No such sub directory
-        	messageForClient = "Could not find a sub directory called " + folderName;
-    	}
-    }
-    	
- 
 }
