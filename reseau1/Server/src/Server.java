@@ -1,7 +1,11 @@
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -13,7 +17,6 @@ import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.regex.Pattern;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
@@ -23,9 +26,6 @@ import javax.swing.JTextField;
 public class Server {
 	//credit to Necronet for pattern : https://stackoverflow.com/questions/5667371/validate-ipv4-address-in-java
 	private static final Pattern IP_ADDR_PATTERN = Pattern.compile("^(([01]?\\d\\d?|2[0-4]\\d|25[0-5])\\.){3}([01]?\\d\\d?|2[0-4]\\d|25[0-5])$");
-	
-	//technique class Folder
-	private static volatile Folder rootDirectory;
 	
 	//technique de creation sur disque
 	private static final String rootDirectoryName = "./root";
@@ -79,7 +79,6 @@ public class Server {
         	listener.setReuseAddress(true);
         	listener.bind(new InetSocketAddress(locIP, port));
         	
-        	rootDirectory = new Folder("root", null);
         	
         	if (!(Files.exists(Paths.get(rootDirectoryName)) && Files.isDirectory(Paths.get(rootDirectoryName)))) {
         		Files.createDirectory(Paths.get(rootDirectoryName));
@@ -106,11 +105,6 @@ public class Server {
         private PrintWriter out;
         private BufferedReader in;
         private boolean isThreadRunning;
-        
-        //technique de class Folder
-        private Folder currentDirectory;
-        
-        //technique de creation sur disque
         private String currentPath;
         
 
@@ -125,7 +119,6 @@ public class Server {
                 in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
                 out = new PrintWriter(socket.getOutputStream(), true);
                 isThreadRunning = true;
-                currentDirectory = rootDirectory;
                 currentPath = rootDirectoryName;
 
                 // Send a welcome message to the client.
@@ -184,33 +177,6 @@ public class Server {
         }
         
         private void executeCdCommand(String argument) {
-        	/*
-        	//technique de class Folder
-        	
-        	//checking for valid argument
-        	if (argument == null || argument.equals("")) {
-        		out.println("This is not a valid argument for command cd.");
-        	}
-        	
-        	// command cd .. -> backing up to parent directory (if possible)
-        	if (argument.equals("..") && currentDirectory.getParentDirectory() != null) {
-        		currentDirectory = currentDirectory.getParentDirectory();
-        		return;
-        	}
-        	
-        	//looking for sub directory for name = argument
-        	for (Folder folder : currentDirectory.getChildrenDirectories()) {
-        		if (folder.getFolderName().equals(argument)) {
-        			currentDirectory = folder;
-        			return;
-        		}
-        	}
-        	
-        	//No such sub directory
-        	out.println("Could not find a sub directory called " + argument);
-        	
-            */
-        	//technique de creation sur disque
         	
         	//checking for valid argument
         	if (argument == null || argument.equals("")) {
@@ -234,25 +200,6 @@ public class Server {
         }
         
         private void executeLsCommand() throws IOException {
-        	/*
-        	//technique de class Folder
-        	ArrayList<String> names = new ArrayList<String>();
-        	
-        	//get folder names
-        	for (Folder folder : currentDirectory.getChildrenDirectories()) {
-        		names.add(folder.getFolderName());
-        	}
-        	//get file names
-        	for (File file : currentDirectory.getFiles()) {
-        		names.add(file.getName());
-        	}
-        	//sort alphabetically
-        	Collections.sort(names, String.CASE_INSENSITIVE_ORDER);
-        	//send to user
-        	out.println(names.toString());
-        	*/
-        	
-        	//technique de creation sur disque
         	ArrayList<String> names = new ArrayList<String>();
         	
         	for (Path sub : Files.newDirectoryStream(Paths.get(currentPath))) {
@@ -262,39 +209,7 @@ public class Server {
         }
 
         private void executeMkdirCommand(String argument) throws IOException {
-        	/*
-        	//technique de class Folder
-        	//Cancel command if another client is currently modifying this directory
-        	if (!currentDirectory.isSafeToModify()) {
-        		out.println("Another client is currently modifying this directory. Please try again later.");
-        		return;
-        	} else {
-        		currentDirectory.setSafeToModify(false);
-        	}
         	
-        	//check if name is valid for a new directory
-        	if (argument.equals(null) || argument.equals("")) {
-        		out.println("Enter a non null name for your new directory.");
-        		currentDirectory.setSafeToModify(true);
-        		return;
-        	}
-        	
-        	//check if there is already a sub directory with that name
-        	for (Folder folder : currentDirectory.getChildrenDirectories()) {
-        		if (argument.equals(folder.getFolderName())) {
-        			out.println("There is already a folder with this name in the current directory.\n" +
-        						"Please choose another name or use mkdir command in another directory.");
-        			currentDirectory.setSafeToModify(true);
-        			return;
-        		}
-        	}
-        	
-        	//Conditions cleared. Creating new directory in current one.
-        	currentDirectory.getChildrenDirectories().add(new Folder(argument, currentDirectory));
-        	currentDirectory.setSafeToModify(true);
-        	*/
-        	
-        	//technique de creation sur disque
         	//check if name is valid for a new directory
         	if (argument.equals(null) || argument.equals("")) {
         		out.println("Enter a non null name for your new directory.");
@@ -312,11 +227,59 @@ public class Server {
         }
         
         private void executeUploadCommand(String argument) throws IOException {
+        	String fileName = argument;
+        	int substringIndex;
+        	int count = 1;
+        	    	
+        	//if file already in, register second time as fileName(1).pdf, fileName(2).pdf, etc.
+        	while (Files.exists(Paths.get(currentPath + "/" + fileName)) && !Files.isDirectory(Paths.get(currentPath + "/" + fileName))) {
+        		substringIndex = fileName.indexOf(".", 0);
+        		fileName = fileName.substring(0, substringIndex) + "(" + count++ + ")" + fileName.substring(substringIndex, fileName.length()-1);
+        	}
         	
+        	//read file checksum client sends so you can verify upload was successful.
+        	String checksum = in.readLine();
+        	
+        	File newFile = new File(currentPath, fileName); //Adding directory will write file in it
+        	OutputStream fileWriter = new FileOutputStream(newFile);
+        	InputStream inFromSocket = socket.getInputStream();
+        	byte[] bytesFromSocket = new byte[8192];
+        	int sizeReadFromSocket;
+        	
+        	while ((sizeReadFromSocket = inFromSocket.read(bytesFromSocket)) > 0) {
+        		fileWriter.write(bytesFromSocket, 0, sizeReadFromSocket);
+        	}
+        	fileWriter.flush();
+        	fileWriter.close();
+        	//Do not close the socket input stream. It is still used by BufferedReader in.
+        	
+        	//Verify if upload worked
+        	if (!checksum.equals(getFileChecksum(currentPath + "/" + fileName))) {
+        		out.println("Upload did not work.");
+        	}
         }
         
-        private void executeDownloadCommand(String argument) {
+        private void executeDownloadCommand(String argument) throws IOException {
+        	if (!Files.exists(Paths.get(currentPath + "/" + argument)) || Files.isDirectory(Paths.get(currentPath + "/" + argument))) {
+        		out.println("File does not exist in this directory.");
+        		return;
+        	}
         	
+        	//first get the checksum for the "asked for" file
+        	String checksum = getFileChecksum(currentPath + "/" + argument);
+        	//Now send the client the file checksum so he can verify his download later.
+        	out.println(checksum);
+        	
+        	File fileForClient = new File(currentPath + "/" + argument);
+        	InputStream inFromFile = new FileInputStream(fileForClient);
+        	OutputStream socketOutput = socket.getOutputStream();
+        	byte[] bytesReadFromFile = new byte[8192];
+        	int sizeReadFromFile;
+        	while ((sizeReadFromFile = inFromFile.read(bytesReadFromFile)) > 0) {
+        		socketOutput.write(bytesReadFromFile, 0, sizeReadFromFile);
+        	}
+        	in.close();
+        	//Do not close the socket's output stream. We are still using it with the Printwriter out.
         }
         
         private void executeExitCommand() throws IOException {
@@ -324,6 +287,24 @@ public class Server {
         	out.close();
         	in.close();
         	isThreadRunning = false;
+        }
+        
+        private String getFileChecksum(String filePath) throws IOException {
+        	String command = "certUtil -hashfile " + filePath + "MD5";
+        	Process proc = Runtime.getRuntime().exec(command);
+        	
+        	BufferedReader commandPromptInput = new BufferedReader(new InputStreamReader(proc.getInputStream()));
+        	String line;
+        	String hash = null;
+        	
+        	while ((line = commandPromptInput.readLine()) != null) {
+        		if (!line.contains("MD5") && !line.contains("CertUtil")) {
+        			//this is the hash line
+        			hash = line;
+        			break;
+        		}
+        	}
+        	return hash;
         }
     }
     	
