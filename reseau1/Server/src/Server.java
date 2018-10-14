@@ -238,7 +238,7 @@ public class Server {
         	}
         	
         	//read file checksum client sends so you can verify upload was successful.
-        	String checksum = in.readLine();
+        	//String checksum = in.readLine();
         	
         	File newFile = new File(currentPath, fileName); //Adding directory will write file in it
         	OutputStream fileWriter = new FileOutputStream(newFile);
@@ -254,9 +254,9 @@ public class Server {
         	//Do not close the socket input stream. It is still used by BufferedReader in.
         	
         	//Verify if upload worked
-        	if (!checksum.equals(getFileChecksum(currentPath + "/" + fileName))) {
+        	/*if (!checksum.equals(getFileChecksum(currentPath + "/" + fileName))) {
         		out.println("Upload did not work.");
-        	}
+        	}*/
         }
         
         private void executeDownloadCommand(String argument) throws IOException {
@@ -266,9 +266,9 @@ public class Server {
         	}
         	
         	//first get the checksum for the "asked for" file
-        	String checksum = getFileChecksum(currentPath + "/" + argument);
+        	//String checksum = getFileChecksum(currentPath + "/" + argument);
         	//Now send the client the file checksum so he can verify his download later.
-        	out.println(checksum);
+        	//out.println(checksum);
         	
         	File fileForClient = new File(currentPath + "/" + argument);
         	InputStream inFromFile = new FileInputStream(fileForClient);
