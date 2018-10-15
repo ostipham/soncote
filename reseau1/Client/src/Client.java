@@ -1,7 +1,11 @@
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.io.BufferedOutputStream;
 import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.InetAddress;
@@ -20,6 +24,7 @@ import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 
+
 public class Client {
 	//credit to Necronet for pattern : https://stackoverflow.com/questions/5667371/validate-ipv4-address-in-java
 	private static final Pattern IP_ADDR_PATTERN = Pattern.compile("^(([01]?\\d\\d?|2[0-4]\\d|25[0-5])\\.){3}([01]?\\d\\d?|2[0-4]\\d|25[0-5])$");
@@ -30,6 +35,7 @@ public class Client {
     private JTextArea messageArea = new JTextArea(8, 60);
 
     private Thread readThread;
+	private static Socket socket;
     /**
      * Constructs the client by laying out the GUI and registering a
      * listener with the textfield so that pressing Enter in the
@@ -74,6 +80,50 @@ public class Client {
     		try {
     			response = in.readLine();
     			messageArea.append(response + "\n");
+    			response = in.readLine();
+    			if (response.equals("cd")) {
+    				response = in.readLine();
+    				messageArea.append("Vous êtes dans le dossier " + response + "." + "\n");
+    			}
+    			if (response.equals("ls")) {
+    				response = in.readLine();
+    				messageArea.append(response + "\n");
+    				/*
+    				int lsSize = in.read();
+    				 messageArea.append("nombre " + lsSize + " nombre");
+    	            for (int i = 0; i < lsSize; i++) {
+    	            	System.out.print(lsSize + "\n");
+    	            	System.out.print(i + "\n");
+    	                messageArea.append(in.readLine() + "\n");
+    	            }
+    	            */
+    			}
+    			if (response.equals("mkdir")) {
+    				response = in.readLine();
+    				messageArea.append("Le dossier " + response + " a été crée." + "\n");
+    			}
+    			if (response.equals("download")) {
+    				// marche mais bug le tout apres
+    				response = in.readLine();
+    				byte[] b = new byte[1];
+    		        int bytesRead;
+    		        InputStream input = null;
+    		        input = socket.getInputStream();
+    		        ByteArrayOutputStream output = new ByteArrayOutputStream();
+                	FileOutputStream file = new FileOutputStream("./" + response);
+                	BufferedOutputStream bOutput = new BufferedOutputStream(file);
+                    bytesRead = input.read(b, 0, b.length);
+                    do {
+                            output.write(b);
+                            bytesRead = input.read(b);
+                    } while (bytesRead != -1);
+
+                    bOutput.write(output.toByteArray());
+                    bOutput.flush();
+                    bOutput.close();
+                    messageArea.append("Le fichier " + response + " à bien été crée." + "\n");
+                    // socket.close();
+    			}
     		} catch (IOException e) {
     			System.out.println("Error in reading thread for client");
     		}
@@ -92,9 +142,6 @@ public class Client {
     @SuppressWarnings("resource")
 	public void connectToServer() throws IOException {
 
-        /*
-         ajout
-         */
         int port;
         String serverAddress;
         Socket socket;
@@ -133,6 +180,7 @@ public class Client {
             	}
         	}
         	socket = new Socket(serverAddress, port);
+        	this.socket = socket;
         	System.out.format("The capitalization server is running on %s:%d%n", serverAddress, port);
             in = new BufferedReader(
                     new InputStreamReader(socket.getInputStream()));
