@@ -132,9 +132,10 @@ public class Server {
                 while (isThreadRunning) {
                     String input = in.readLine();
                     LocalDateTime date = LocalDateTime.now();
-                    log("[" + socket.getInetAddress() + ":" + socket.getPort() + " - " + dateFormat.format(date) + "]: " + input);     
+                    log("[" + socket.getInetAddress() + ":" + socket.getPort() + " - " + dateFormat.format(date) + "]: " + input);
+                    
                     command = input.split(" ");
-                    out.println(input);
+                    
                     switch(command[0]) {
                     case "cd" :
                     	executeCdCommand(command[1]);
@@ -178,21 +179,23 @@ public class Server {
         }
         
         private void executeCdCommand(String argument) {
+        	
         	//checking for valid argument
         	if (argument == null || argument.equals("")) {
         		out.println("This is not a valid argument for command cd.");
         	}
         	
         	// command cd .. -> backing up to parent directory (if possible)
+        	// semble problematique
         	if (argument.equals("..") && currentPath.equals("./root")) {
-        		currentPath = currentPath.substring(0, currentPath.lastIndexOf("/", 0)); //cutting the last "/name" from path
         		out.println("cd");
-        		out.println(currentPath);
+        		currentPath = currentPath.substring(0, currentPath.lastIndexOf("/", 0)); //cutting the last "/name" from path
         		return;
         	}
         	
         	//looking for sub directory for name = argument
         	if (Files.exists(Paths.get(currentPath + "/" + argument)) && Files.isDirectory(Paths.get(currentPath + "/" + argument))) {
+        		System.out.println(currentPath);
         		currentPath = currentPath + "/" + argument;
         		out.println("cd");
         		out.println(argument);
@@ -204,15 +207,14 @@ public class Server {
         }
         
         private void executeLsCommand() throws IOException {
-        	out.println("ls");
         	ArrayList<String> names = new ArrayList<String>();
         	
         	for (Path sub : Files.newDirectoryStream(Paths.get(currentPath))) {
         		names.add(sub.getFileName().toString());
         	}
-        	out.println(names);
-        	/*
-        	out.println(names.size());
+        	out.println("ls");
+        	out.write(names.size());
+        	out.flush();
     		for (int i = 0; i < names.size(); i++) {
     			 if(names.get(i).contains(".")) {
     				 out.println("[File] " + names.get(i));
@@ -220,7 +222,6 @@ public class Server {
     				 out.println("[Folder] " + names.get(i));
     			 }
     		}
-    		*/
         }
 
         private void executeMkdirCommand(String argument) throws IOException {
@@ -281,33 +282,26 @@ public class Server {
         		out.println("File does not exist in this directory.");
         		return;
         	}
-        	out.println("download");
-        	out.println(argument);
+        	
         	//first get the checksum for the "asked for" file
         	//String checksum = getFileChecksum(currentPath + "/" + argument);
         	//Now send the client the file checksum so he can verify his download later.
         	//out.println(checksum);
         	/*
         	File fileForClient = new File(currentPath + "/" + argument);
-        	
         	InputStream inFromFile = new FileInputStream(fileForClient);
-        	
         	OutputStream socketOutput = socket.getOutputStream();
-        	
         	byte[] bytesReadFromFile = new byte[8192];
-        	
         	int sizeReadFromFile;
         	while ((sizeReadFromFile = inFromFile.read(bytesReadFromFile)) > 0) {
         		socketOutput.write(bytesReadFromFile, 0, sizeReadFromFile);
         	}
-        	in.close();
-        	//Do not close the socket's output stream. We are still using it with the Printwriter out.
         	*/
-        	
-        	// marche mais bug le tout apres
+        	out.println("download");
+        	out.println(argument);
         	BufferedOutputStream communicationOutToClient = null;
         	communicationOutToClient = new BufferedOutputStream(socket.getOutputStream());
-        	File myFile = new File("./" + argument);
+        	File myFile = new File(currentPath + "/" + argument);
         	byte[] mybytearray = new byte[(int) myFile.length()];
         	FileInputStream fis = null;
         	fis = new FileInputStream(myFile);
@@ -315,8 +309,8 @@ public class Server {
         	bis.read(mybytearray, 0, mybytearray.length);
         	communicationOutToClient.write(mybytearray, 0, mybytearray.length);
             communicationOutToClient.flush();
-            in.close();
-        	
+        	in.close();
+        		//Do not close the socket's output stream. We are still using it with the Printwriter out.
         }
         
         private void executeExitCommand() throws IOException {
