@@ -30,6 +30,8 @@ public class Server {
 	//technique de creation sur disque
 	private static final String rootDirectoryName = "./root";
 	
+	private static String ipAddr;
+	
     public static void main(String[] args) throws Exception {
        
         int clientNumber = 0;
@@ -50,7 +52,7 @@ public class Server {
         // Get the server address from a dialog box.
         int ok = JOptionPane.showConfirmDialog(null, panel,"Enter Server informations:", JOptionPane.OK_CANCEL_OPTION);    
         if (ok == JOptionPane.OK_OPTION) {     
-        	serverAddress = ipAddrField.getText();
+        	ipAddr = ipAddrField.getText();
         	try {
         		port = Integer.parseInt(portField.getText());
         	} catch (NumberFormatException e) {
@@ -59,12 +61,12 @@ public class Server {
         	
         	
         	// verification loop
-        	while (!(port >= 5000 && port <= 5050 && IP_ADDR_PATTERN.matcher(serverAddress).matches())) {
+        	while (!(port >= 5000 && port <= 5050 && IP_ADDR_PATTERN.matcher(ipAddr).matches())) {
         		ok = JOptionPane.showConfirmDialog(null, panel,"Some informations were faulty. Enter Server informations:", 
         									  	   JOptionPane.OK_CANCEL_OPTION);
         		if (ok == JOptionPane.CANCEL_OPTION)
         			return;
-        		serverAddress = ipAddrField.getText();
+        		ipAddr = ipAddrField.getText();
         		try {
             		port = Integer.parseInt(portField.getText());
             	} catch (NumberFormatException e) {
@@ -74,7 +76,7 @@ public class Server {
         	
         	//information is good -> Instantiate listener and start server.
         	ServerSocket listener;
-        	InetAddress locIP = InetAddress.getByName(serverAddress);
+        	InetAddress locIP = InetAddress.getByName(ipAddr);
         	listener = new ServerSocket();
         	listener.setReuseAddress(true);
         	listener.bind(new InetSocketAddress(locIP, port));
@@ -84,7 +86,7 @@ public class Server {
         		Files.createDirectory(Paths.get(rootDirectoryName));
         	}
 
-        	System.out.format("The file management server is running on %s:%d%n", serverAddress, port);
+        	System.out.format("The file management server is running on %s:%d%n", ipAddr, port);
     
         	try {
         		while (true) {
@@ -226,7 +228,20 @@ public class Server {
         	Files.createDirectory(Paths.get(currentPath + "/" + argument));
         }
         
-        private void executeUploadCommand(String argument) throws IOException {
+        private void executeUploadCommand(String argument) throws IOException {     	
+        	ServerSocket listener;
+        	InetAddress locIP = InetAddress.getByName(ipAddr);
+        	listener = new ServerSocket();
+        	listener.setReuseAddress(true);
+        	listener.bind(new InetSocketAddress(locIP, 5060));
+        	
+        	//out.println("ready");
+        	Socket inputSocket = listener.accept();
+        	InputStream inFromSocket = inputSocket.getInputStream();
+        	
+        	log("upload socket connected.\n");
+        	
+        	String confirmation = "";
         	String fileName = argument;
         	int substringIndex;
         	int count = 1;
@@ -237,26 +252,24 @@ public class Server {
         		fileName = fileName.substring(0, substringIndex) + "(" + count++ + ")" + fileName.substring(substringIndex, fileName.length()-1);
         	}
         	
-        	//read file checksum client sends so you can verify upload was successful.
-        	//String checksum = in.readLine();
-        	
         	File newFile = new File(currentPath, fileName); //Adding directory will write file in it
         	OutputStream fileWriter = new FileOutputStream(newFile);
-        	InputStream inFromSocket = socket.getInputStream();
         	byte[] bytesFromSocket = new byte[8192];
         	int sizeReadFromSocket;
         	
         	while ((sizeReadFromSocket = inFromSocket.read(bytesFromSocket)) > 0) {
         		fileWriter.write(bytesFromSocket, 0, sizeReadFromSocket);
         	}
+        	
+        	/*out.println("fini");
+			while (!confirmation.equals("fini")) {
+				confirmation = in.readLine();
+			}	*/
+        	
         	fileWriter.flush();
         	fileWriter.close();
+        	inputSocket.close();
         	//Do not close the socket input stream. It is still used by BufferedReader in.
-        	
-        	//Verify if upload worked
-        	/*if (!checksum.equals(getFileChecksum(currentPath + "/" + fileName))) {
-        		out.println("Upload did not work.");
-        	}*/
         }
         
         private void executeDownloadCommand(String argument) throws IOException {
@@ -264,11 +277,6 @@ public class Server {
         		out.println("File does not exist in this directory.");
         		return;
         	}
-        	
-        	//first get the checksum for the "asked for" file
-        	//String checksum = getFileChecksum(currentPath + "/" + argument);
-        	//Now send the client the file checksum so he can verify his download later.
-        	//out.println(checksum);
         	
         	File fileForClient = new File(currentPath + "/" + argument);
         	InputStream inFromFile = new FileInputStream(fileForClient);
@@ -278,7 +286,7 @@ public class Server {
         	while ((sizeReadFromFile = inFromFile.read(bytesReadFromFile)) > 0) {
         		socketOutput.write(bytesReadFromFile, 0, sizeReadFromFile);
         	}
-        	in.close();
+        	inFromFile.close();
         	//Do not close the socket's output stream. We are still using it with the Printwriter out.
         }
         
@@ -289,23 +297,6 @@ public class Server {
         	isThreadRunning = false;
         }
         
-        private String getFileChecksum(String filePath) throws IOException {
-        	String command = "certUtil -hashfile " + filePath + "MD5";
-        	Process proc = Runtime.getRuntime().exec(command);
-        	
-        	BufferedReader commandPromptInput = new BufferedReader(new InputStreamReader(proc.getInputStream()));
-        	String line;
-        	String hash = null;
-        	
-        	while ((line = commandPromptInput.readLine()) != null) {
-        		if (!line.contains("MD5") && !line.contains("CertUtil")) {
-        			//this is the hash line
-        			hash = line;
-        			break;
-        		}
-        	}
-        	return hash;
-        }
     }
     	
 }
