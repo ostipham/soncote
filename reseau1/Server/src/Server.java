@@ -1,3 +1,5 @@
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
@@ -229,47 +231,35 @@ public class Server {
         }
         
         private void executeUploadCommand(String argument) throws IOException {     	
-        	ServerSocket listener;
-        	InetAddress locIP = InetAddress.getByName(ipAddr);
-        	listener = new ServerSocket();
-        	listener.setReuseAddress(true);
-        	listener.bind(new InetSocketAddress(locIP, 5060));
-        	
-        	//out.println("ready");
-        	Socket inputSocket = listener.accept();
-        	InputStream inFromSocket = inputSocket.getInputStream();
-        	
-        	log("upload socket connected.\n");
-        	
-        	String confirmation = "";
         	String fileName = argument;
         	int substringIndex;
         	int count = 1;
         	    	
         	//if file already in, register second time as fileName(1).pdf, fileName(2).pdf, etc.
-        	while (Files.exists(Paths.get(currentPath + "/" + fileName)) && !Files.isDirectory(Paths.get(currentPath + "/" + fileName))) {
+        	if (Files.exists(Paths.get(currentPath + "/" + fileName)) && !Files.isDirectory(Paths.get(currentPath + "/" + fileName))) {
         		substringIndex = fileName.indexOf(".", 0);
-        		fileName = fileName.substring(0, substringIndex) + "(" + count++ + ")" + fileName.substring(substringIndex, fileName.length()-1);
+        		fileName = fileName.substring(0, substringIndex) + "(" + count++ + ")" + fileName.substring(substringIndex, fileName.length());
+        	}
+        	while (Files.exists(Paths.get(currentPath + "/" + fileName)) && !Files.isDirectory(Paths.get(currentPath + "/" + fileName))) {
+        		fileName = fileName.replace("(" + count + ")", "(" + ++count + ")");
         	}
         	
+        	
         	File newFile = new File(currentPath, fileName); //Adding directory will write file in it
-        	OutputStream fileWriter = new FileOutputStream(newFile);
+        	FileOutputStream fileOutput = new FileOutputStream(newFile);
+        	BufferedOutputStream fileWriter = new BufferedOutputStream(fileOutput);
+        	InputStream inFromSocket = socket.getInputStream();
         	byte[] bytesFromSocket = new byte[8192];
         	int sizeReadFromSocket;
         	
-        	while ((sizeReadFromSocket = inFromSocket.read(bytesFromSocket)) > 0) {
+        	while (inFromSocket.available() > 0) {
+        		sizeReadFromSocket = inFromSocket.read(bytesFromSocket);
         		fileWriter.write(bytesFromSocket, 0, sizeReadFromSocket);
         	}
         	
-        	/*out.println("fini");
-			while (!confirmation.equals("fini")) {
-				confirmation = in.readLine();
-			}	*/
-        	
         	fileWriter.flush();
         	fileWriter.close();
-        	inputSocket.close();
-        	//Do not close the socket input stream. It is still used by BufferedReader in.
+        	fileOutput.close();
         }
         
         private void executeDownloadCommand(String argument) throws IOException {
@@ -278,16 +268,20 @@ public class Server {
         		return;
         	}
         	
-        	File fileForClient = new File(currentPath + "/" + argument);
-        	InputStream inFromFile = new FileInputStream(fileForClient);
-        	OutputStream socketOutput = socket.getOutputStream();
-        	byte[] bytesReadFromFile = new byte[8192];
+        	File fileForServer = new File(currentPath + "/" + argument);
+        	FileInputStream fileInput = new FileInputStream(fileForServer);
+        	BufferedInputStream inFromFile = new BufferedInputStream(fileInput);
+        	byte[] bytesReadFromFile = new byte[(int) fileForServer.length()];
         	int sizeReadFromFile;
+        	OutputStream outToSocket = socket.getOutputStream();
+        	
         	while ((sizeReadFromFile = inFromFile.read(bytesReadFromFile)) > 0) {
-        		socketOutput.write(bytesReadFromFile, 0, sizeReadFromFile);
+        		outToSocket.write(bytesReadFromFile, 0, sizeReadFromFile);
         	}
+        	
+        	outToSocket.flush();
         	inFromFile.close();
-        	//Do not close the socket's output stream. We are still using it with the Printwriter out.
+        	fileInput.close();
         }
         
         private void executeExitCommand() throws IOException {
