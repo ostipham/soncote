@@ -238,7 +238,7 @@ public class Server {
         	//if file already in, register second time as fileName(1).pdf, fileName(2).pdf, etc.
         	if (Files.exists(Paths.get(currentPath + "/" + fileName)) && !Files.isDirectory(Paths.get(currentPath + "/" + fileName))) {
         		substringIndex = fileName.indexOf(".", 0);
-        		fileName = fileName.substring(0, substringIndex) + "(" + count++ + ")" + fileName.substring(substringIndex, fileName.length());
+        		fileName = fileName.substring(0, substringIndex) + "(" + count + ")" + fileName.substring(substringIndex, fileName.length());
         	}
         	while (Files.exists(Paths.get(currentPath + "/" + fileName)) && !Files.isDirectory(Paths.get(currentPath + "/" + fileName))) {
         		fileName = fileName.replace("(" + count + ")", "(" + ++count + ")");
