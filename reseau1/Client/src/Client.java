@@ -28,6 +28,8 @@ import javax.swing.JTextArea;
 import javax.swing.JTextField;
 
 public class Client {
+	private static final String RESPONSE_END = "done";
+	
 	//credit to Necronet for pattern : https://stackoverflow.com/questions/5667371/validate-ipv4-address-in-java
 	private static final Pattern IP_ADDR_PATTERN = Pattern.compile("^(([01]?\\d\\d?|2[0-4]\\d|25[0-5])\\.){3}([01]?\\d\\d?|2[0-4]\\d|25[0-5])$");
 	private static BufferedReader in;
@@ -54,6 +56,9 @@ public class Client {
           
             public void actionPerformed(ActionEvent e) {
                 
+            	messageArea.append(dataField.getText() + "\n");
+            	out.println(dataField.getText());
+            	
             	String[] command;
             	command = dataField.getText().split(" ");
 				if (command[0].equals("upload")) {
@@ -74,7 +79,7 @@ public class Client {
 					}
 					
 				}
-				if (command[0].equals("ls")) {
+				if (command[0].equals("ls") || command[0].equals("mkdir") || command[0].equals("cd")|| command[0].equals("exit")) {
 					try {
 						readThread = new ReadingThread(in, messageArea);
 						readThread.start();              	
@@ -82,7 +87,6 @@ public class Client {
                        messageArea.append("Error: " + ex + "\n");
 					}
 				}
-                out.println(dataField.getText());
             }
         });
         
@@ -91,17 +95,35 @@ public class Client {
     private static class ReadingThread extends Thread {
     	private BufferedReader in;
     	private JTextArea messageArea;
+    	private boolean isReading;
     	
     	public ReadingThread(BufferedReader in, JTextArea messageArea) {
     		this.in= in;
     		this.messageArea = messageArea;
+    		this.isReading = true;
     	}
     	
     	public void run() {
     		String response;
     		try {
-    			response = in.readLine();	
-    			messageArea.append(response + "\n");		    				
+    			messageArea.append("reading thread starts\n");
+    			while (isReading) {
+    				
+    				response = in.readLine();
+    				if (response.equals(RESPONSE_END)) {
+    					messageArea.append("\n");
+    					isReading = false;
+    				}
+    				else {
+    					messageArea.append(response + "\n");
+    				}			
+    			}
+    			messageArea.append("reading thread ends\n");
+    			
+    			while(in.ready()) {
+    				response = in.readLine();	
+    				messageArea.append(response + "\n");
+    			}		    				
     		} catch (IOException e) {
     			System.out.println("Error in reading thread for client");
     		}		
@@ -120,20 +142,48 @@ public class Client {
     	}
     	
     	public void run() {
-    		try {			
-            	File fileForServer = new File("./" + fileName);
+    		try {	
+    			String confirmation = in.readLine();
+    			if (!confirmation.equals("begin"))
+    				return;
+
+    			File fileForServer = new File("./" + fileName);
+    			int length = (int) fileForServer.length();
+    			messageArea.append(length + "\n");
+    			out.println(length);
+    			confirmation = in.readLine();
+    			if (!confirmation.equals("received"))
+    				return;
+    			
             	FileInputStream fileInput = new FileInputStream(fileForServer);
             	BufferedInputStream inFromFile = new BufferedInputStream(fileInput);
-            	byte[] bytesReadFromFile = new byte[(int) fileForServer.length()];
+            	byte[] bytesReadFromFile = new byte[100];
             	int sizeReadFromFile;
+            	int total = 0;
+            	BufferedOutputStream outt = new BufferedOutputStream(outToSocket);
             	
-            	while ((sizeReadFromFile = inFromFile.read(bytesReadFromFile)) > 0) {
-            		outToSocket.write(bytesReadFromFile, 0, sizeReadFromFile);
+            	messageArea.append("before while\n");
+            	while (total != length) {
+            		sizeReadFromFile = inFromFile.read(bytesReadFromFile);
+            		messageArea.append("in while\n");
+            		outt.write(bytesReadFromFile, 0, sizeReadFromFile);
+            		total += sizeReadFromFile;
             	}
+            	outt.flush();
+            	messageArea.append("after while\n");
             	
-            	outToSocket.flush();
+            	confirmation = in.readLine();
+            	if (!confirmation.equals("done")) {
+            		messageArea.append("Problem with upload command.\n");
+            	}
+            	else {
+            		messageArea.append("Upload successful.\n");
+            	}
+    			
+            	
             	inFromFile.close();
             	fileInput.close();
+            	
     		} catch (Exception e) {
     			System.out.println("Error uploading file. Error = " + e.toString() + "\n");
     		}
@@ -153,6 +203,7 @@ public class Client {
     	
     	public void run() {
     		try {
+    			/*
             	int substringIndex;
             	int count = 1;
             	    	
@@ -180,6 +231,36 @@ public class Client {
             	fileWriter.flush();
             	fileWriter.close();
             	fileOutput.close();
+            	*/
+    			Socket downloadSocket = new Socket(ipAddr, 5555);
+    			int substringIndex;
+            	int count = 1;
+            	    	
+            	//if file already in, register second time as fileName(1).pdf, fileName(2).pdf, etc.
+            	if (Files.exists(Paths.get("./" + fileName)) && !Files.isDirectory(Paths.get("./" + fileName))) {
+            		substringIndex = fileName.indexOf(".", 0);
+            		fileName = fileName.substring(0, substringIndex) + "(" + count + ")" + fileName.substring(substringIndex, fileName.length());
+            	}
+            	while (Files.exists(Paths.get("./" + fileName)) && !Files.isDirectory(Paths.get("./" + fileName))) {
+            		fileName = fileName.replace("(" + count + ")", "(" + ++count + ")");
+            	}
+            	
+            	
+            	File newFile = new File("./", fileName); //Adding directory will write file in it
+            	FileOutputStream fileOutput = new FileOutputStream(newFile);
+            	BufferedOutputStream fileWriter = new BufferedOutputStream(fileOutput);
+            	byte[] bytesFromSocket = new byte[8192];
+            	int sizeReadFromSocket;
+            	
+            	while (inFromSocket.available() > 0) {
+            		sizeReadFromSocket = inFromSocket.read(bytesFromSocket);
+            		fileWriter.write(bytesFromSocket, 0, sizeReadFromSocket);
+            	}
+            	
+            	fileWriter.flush();
+            	fileWriter.close();
+            	fileOutput.close();
+            	downloadSocket.close();
     		} catch (Exception e) {
     			System.out.println("Error downloading file. Error = " + e.toString() + "\n");
     		}
