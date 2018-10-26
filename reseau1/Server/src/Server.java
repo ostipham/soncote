@@ -7,7 +7,6 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -27,16 +26,22 @@ import javax.swing.JTextField;
 
 public class Server {
 	private static final String RESPONSE_END = "done";
+	private static final String BACK = "..";
+	private static final String INVALID_COMMAND = "invalid";
+	private static final String CD = "cd";
+	private static final String LS = "ls";
+	private static final String MKDIR = "mkdir";
+	private static final String DOWNLOAD = "download";
+	private static final String UPLOAD = "upload";
+	private static final String EXIT = "exit";
 	
 	//credit to Necronet for pattern : https://stackoverflow.com/questions/5667371/validate-ipv4-address-in-java
 	private static final Pattern IPv4_ADDR_PATTERN = Pattern.compile("^(([01]?\\d\\d?|2[0-4]\\d|25[0-5])\\.){3}([01]?\\d\\d?|2[0-4]\\d|25[0-5])$");
-	private static final int IP_ADDRESS_LENGTH = 15;
-	private static final int NB_PORT_DIGITS = 4;
+	private static final int NB_DIGITS_IP_ADDRESS = 15;
+	private static final int NB_DIGITS_PORT = 4;
 	
 	//root directory name
 	private static final String ROOT_DIRECTORY_NAME = "./root";
-	
-	private static String ipAddr;
 	
 	
     public static void main(String[] args) throws Exception {
@@ -47,9 +52,9 @@ public class Server {
         
         // Java swing objects for information input box
         JPanel panel = new JPanel();
-        JTextField ipAddrField = new JTextField(IP_ADDRESS_LENGTH);
+        JTextField ipAddrField = new JTextField(NB_DIGITS_IP_ADDRESS);
         JLabel ipAddrLabel = new JLabel("Insert IPv4 address here (format xxx.xxx.xxx.xxx):");
-        JTextField portField = new JTextField(NB_PORT_DIGITS);
+        JTextField portField = new JTextField(NB_DIGITS_PORT);
         JLabel portLabel = new JLabel("Insert port here (between 5000 and 5050):");
         panel.add(ipAddrLabel);
         panel.add(ipAddrField);
@@ -83,7 +88,6 @@ public class Server {
             		port = 0;
             	}
         	}
-        	ipAddr = serverAddress;
         	
         	//information is good -> Instantiate listener and start server.
         	ServerSocket listener;
@@ -93,7 +97,7 @@ public class Server {
         	listener.bind(new InetSocketAddress(locIP, port));
         	
         	
-        	// if not files root directory, create one at server start.
+        	// if no root directory, create one at server start.
         	if (!(Files.exists(Paths.get(ROOT_DIRECTORY_NAME)) && Files.isDirectory(Paths.get(ROOT_DIRECTORY_NAME)))) {
         		Files.createDirectory(Paths.get(ROOT_DIRECTORY_NAME));
         	}
@@ -144,39 +148,41 @@ public class Server {
                 // get client commands
                 String[] command;
                 while (isThreadRunning) {
-                    String input = in.readLine();
-                    LocalDateTime date = LocalDateTime.now();
-                    log("[" + socket.getInetAddress().getHostAddress() + ":" + socket.getPort() + " - " + DATE_FORMAT.format(date) + "]: " + input);
-                    
+                    String input = in.readLine(); 
                     command = input.split(" ");
                     
+                    //Checks the validity of command's number of words. Ex: If client command = ls, should be 1 word.
+                    if (!checkCommandValidity(command)) {
+                    	command[0] = INVALID_COMMAND;
+                    } else {
+                    	//if valid, print command in server console
+                    	LocalDateTime date = LocalDateTime.now();
+                    	log("[" + socket.getInetAddress().getHostAddress() + ":" + socket.getPort() + " - " + DATE_FORMAT.format(date) + "]: " + input);
+                    }
+                    	
+                    
                     switch(command[0]) {
-                    case "cd" :
-                    	if (command.length == 2)
-                    		executeCdCommand(command[1]);
+                    case CD :
+                    	executeCdCommand(command[1]);
                     	break;
-                    case "ls" :
-                    	if (command.length == 1)
-                    		executeLsCommand();
+                    case LS :
+                    	executeLsCommand();
                     	break;
-                    case "mkdir" :
-                    	if (command.length == 2)
-                    		executeMkdirCommand(command[1]);
+                    case MKDIR :
+                    	executeMkdirCommand(command[1]);
                     	break;
-                    case "upload" :
-                    	if (command.length == 2)
-                    		executeUploadCommand(command[1]);
+                    case UPLOAD :
+                    	executeUploadCommand(command[1]);
                     	break;
-                    case "download" :
-                    	if (command.length == 2)
-                    		executeDownloadCommand(command[1]);
+                    case DOWNLOAD :
+                    	executeDownloadCommand(command[1]);
                     	break;
-                    case "exit" :
-                    	if (command.length == 1)
-                    		executeExitCommand();
+                    case EXIT :
+                    	executeExitCommand();
                     	break;
                     default :
                     	out.println("That is not a valid command. Please enter a valid command.");
+                    	out.println(RESPONSE_END);
                     }
                     command = null;
                 }
@@ -198,40 +204,39 @@ public class Server {
             System.out.println(message);
         }
         
+        private boolean checkCommandValidity(String[] command) {
+        	if (command[0].equals(LS) || command[0].equals(EXIT))
+        		return (command.length == 1);
+        	
+        	if (command[0].equals(MKDIR) || command[0].equals(CD) || command[0].equals(UPLOAD) || command[0].equals(DOWNLOAD))
+        		return (command.length == 2);
+        		
+        	return false;
+        }
+        
         
         /*
          * cd command checks if non null directory name and if directory exists.
          * Changes currentPath to entered directory.
          */
         private void executeCdCommand(String argument) {
-        	
-        	//checking for valid argument
-        	if (argument.equals("") || argument.equals(" ")) {
-        		out.println("This is not a valid folder name for command cd.");
-        		return;
-        	}
-        	
+        	log(argument + "\n");
         	// command cd .. -> backing up to parent directory (if possible). Not possible from root directory.
-        	if (argument.equals("..")) {
-        		if (currentPath.equals("./root")) {
-        			out.println("Root folder has no parent.");
-        			return;
-        		}
-        		currentPath = currentPath.substring(0, currentPath.lastIndexOf("/", 0)); //cutting the last "/name" from path
+        	if (argument.equals(BACK) && currentPath.equals(ROOT_DIRECTORY_NAME)) {
+        		out.println("Root folder has no parent.");
+        	} else if (argument.equals(BACK)) {
+        		log("in .. possible if\n");
+        		currentPath = (currentPath.lastIndexOf("/", 0) != -1)?
+        				currentPath.substring(0, currentPath.lastIndexOf("/", 0)) : ROOT_DIRECTORY_NAME; 
         		out.println("You are in " + currentPath + " folder.");
-        		return;
-        	}
-        	
-        	//looking for sub directory for name = argument
-        	if (Files.exists(Paths.get(currentPath + "/" + argument)) && Files.isDirectory(Paths.get(currentPath + "/" + argument))) {
+        	} else if (!Files.exists(Paths.get(currentPath + "/" + argument)) || !Files.isDirectory(Paths.get(currentPath + "/" + argument))) {
+        		//check if file exists and is a folder
+        		out.println("Could not find a sub directory called " + argument);
+        	} else {
         		currentPath = currentPath + "/" + argument;
         		out.println("You are in " + currentPath + " folder.");
-        		out.println(RESPONSE_END);
-        		return;
         	}
-        	
-        	//No such sub directory
-        	out.println("Could not find a sub directory called " + argument);
+
         	out.println(RESPONSE_END);
         }
         
@@ -260,6 +265,7 @@ public class Server {
         	for (String name: fileNames) {
         		out.println("[File] " + name);
         	}
+        	
         	out.println(RESPONSE_END);
         }
 
@@ -268,22 +274,15 @@ public class Server {
          * mkdir command checks if name is valid and if sub-directory doesn't exist then creates sub-directory.
          */
         private void executeMkdirCommand(String argument) throws IOException {
-        	
-        	//check if name is valid for a new directory
-        	if (argument.equals("") || argument.equals(" ")) {
-        		out.println("Enter a non null name for your new directory.");
-        		return;
-        	}
-        	
-        	//looking for sub directory for name = argument
+        	//check if a folder with this name already exists
         	if (Files.exists(Paths.get(currentPath + "/" + argument)) && Files.isDirectory(Paths.get(currentPath + "/" + argument))) {
         		out.println("There is already a subdirectory with that name.");
-        		return;
+        	} else {
+        		//Conditions cleared. Creating new directory in current one.
+        		Files.createDirectory(Paths.get(currentPath + "/" + argument));
+        		out.println("Folder " + argument + " was successfully created.");
         	}
         	
-        	//Conditions cleared. Creating new directory in current one.
-        	Files.createDirectory(Paths.get(currentPath + "/" + argument));
-        	out.println("Folder " + argument + " was successfully created.");
         	out.println(RESPONSE_END);
         }
         
@@ -308,8 +307,6 @@ public class Server {
         	out.println("begin");
         	String confirmation = in.readLine();
         	int length = Integer.parseInt(confirmation);
-        	//System.out.println(length);
-        	//System.out.println("\n");
         	out.println("received");
         	
         	File newFile = new File(currentPath, fileName);
@@ -321,21 +318,14 @@ public class Server {
         	int total = 0;
         	int sizeReadFromSocket;
         	
-        	//System.out.println("before while...\n");
         	while (total != length) {
-        		//System.out.println("in while...\n");
         		sizeReadFromSocket = inn.read(bytesFromSocket);
         		fileWriter.write(bytesFromSocket, 0, sizeReadFromSocket);
         		total += sizeReadFromSocket;
         	}
         	fileWriter.flush();
-        	//System.out.println("after while...\n");
-        	
-        	
-        	//System.out.println("done reading...");
-        	
-        	out.println("done");
-        	
+
+        	out.println(RESPONSE_END);	
         	fileWriter.close();
         	fileOutput.close();
         	
@@ -348,6 +338,7 @@ public class Server {
         private void executeDownloadCommand(String argument) throws IOException {
         	if (!Files.exists(Paths.get(currentPath + "/" + argument)) || Files.isDirectory(Paths.get(currentPath + "/" + argument))) {
         		out.println("The requested file does not exist.");
+        		out.println(RESPONSE_END);	
         		return;
         	}
         	
@@ -384,7 +375,7 @@ public class Server {
         		out.println("Download successful.\n");
         	}
 			
-        	
+        	out.println(RESPONSE_END);
         	inFromFile.close();
         	fileInput.close();
         }
