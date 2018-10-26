@@ -149,7 +149,7 @@ public class Client {
 
     			File fileForServer = new File("./" + fileName);
     			int length = (int) fileForServer.length();
-    			messageArea.append(length + "\n");
+    			//messageArea.append(length + "\n");
     			out.println(length);
     			confirmation = in.readLine();
     			if (!confirmation.equals("received"))
@@ -162,15 +162,15 @@ public class Client {
             	int total = 0;
             	BufferedOutputStream outt = new BufferedOutputStream(outToSocket);
             	
-            	messageArea.append("before while\n");
+            	//messageArea.append("before while\n");
             	while (total != length) {
             		sizeReadFromFile = inFromFile.read(bytesReadFromFile);
-            		messageArea.append("in while\n");
+            		//messageArea.append("in while\n");
             		outt.write(bytesReadFromFile, 0, sizeReadFromFile);
             		total += sizeReadFromFile;
             	}
             	outt.flush();
-            	messageArea.append("after while\n");
+            	//messageArea.append("after while\n");
             	
             	confirmation = in.readLine();
             	if (!confirmation.equals("done")) {
@@ -203,7 +203,6 @@ public class Client {
     	
     	public void run() {
     		try {
-    			/*
             	int substringIndex;
             	int count = 1;
             	    	
@@ -216,51 +215,31 @@ public class Client {
             		fileName = fileName.replace("(" + count + ")", "(" + ++count + ")");
             	}
             	
+            	out.println("begin");
+            	String confirmation = in.readLine();
+            	int length = Integer.parseInt(confirmation);
+            	out.println("received");
             	
-            	File newFile = new File("./", fileName); //Adding directory will write file in it
+            	File newFile = new File("./", fileName);
             	FileOutputStream fileOutput = new FileOutputStream(newFile);
             	BufferedOutputStream fileWriter = new BufferedOutputStream(fileOutput);
-            	byte[] bytesFromSocket = new byte[8192];
+            	BufferedInputStream inn = new BufferedInputStream(inFromSocket);
+            	byte[] bytesFromSocket = new byte[100];
+            	int total = 0;
             	int sizeReadFromSocket;
             	
-            	while (inFromSocket.available() > 0) {
-            		sizeReadFromSocket = inFromSocket.read(bytesFromSocket);
+            	while (total != length) {
+            		sizeReadFromSocket = inn.read(bytesFromSocket);
             		fileWriter.write(bytesFromSocket, 0, sizeReadFromSocket);
+            		total += sizeReadFromSocket;
             	}
-            	
             	fileWriter.flush();
+
+            	
+            	out.println("done");
+            	
             	fileWriter.close();
             	fileOutput.close();
-            	*/
-    			Socket downloadSocket = new Socket(ipAddr, 5555);
-    			int substringIndex;
-            	int count = 1;
-            	    	
-            	//if file already in, register second time as fileName(1).pdf, fileName(2).pdf, etc.
-            	if (Files.exists(Paths.get("./" + fileName)) && !Files.isDirectory(Paths.get("./" + fileName))) {
-            		substringIndex = fileName.indexOf(".", 0);
-            		fileName = fileName.substring(0, substringIndex) + "(" + count + ")" + fileName.substring(substringIndex, fileName.length());
-            	}
-            	while (Files.exists(Paths.get("./" + fileName)) && !Files.isDirectory(Paths.get("./" + fileName))) {
-            		fileName = fileName.replace("(" + count + ")", "(" + ++count + ")");
-            	}
-            	
-            	
-            	File newFile = new File("./", fileName); //Adding directory will write file in it
-            	FileOutputStream fileOutput = new FileOutputStream(newFile);
-            	BufferedOutputStream fileWriter = new BufferedOutputStream(fileOutput);
-            	byte[] bytesFromSocket = new byte[8192];
-            	int sizeReadFromSocket;
-            	
-            	while (inFromSocket.available() > 0) {
-            		sizeReadFromSocket = inFromSocket.read(bytesFromSocket);
-            		fileWriter.write(bytesFromSocket, 0, sizeReadFromSocket);
-            	}
-            	
-            	fileWriter.flush();
-            	fileWriter.close();
-            	fileOutput.close();
-            	downloadSocket.close();
     		} catch (Exception e) {
     			System.out.println("Error downloading file. Error = " + e.toString() + "\n");
     		}

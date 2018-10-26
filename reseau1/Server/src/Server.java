@@ -146,7 +146,7 @@ public class Server {
                 while (isThreadRunning) {
                     String input = in.readLine();
                     LocalDateTime date = LocalDateTime.now();
-                    log("[" + socket.getInetAddress() + ":" + socket.getPort() + " - " + DATE_FORMAT.format(date) + "]: " + input);
+                    log("[" + socket.getInetAddress().getHostAddress() + ":" + socket.getPort() + " - " + DATE_FORMAT.format(date) + "]: " + input);
                     
                     command = input.split(" ");
                     
@@ -291,8 +291,7 @@ public class Server {
         /*
          * upload command renames if already existing file present, reads from socket and write in file.
          */
-        private void executeUploadCommand(String argument) throws IOException {     	
-        	
+        private void executeUploadCommand(String argument) throws IOException {     	  	
         	String fileName = argument;
         	int substringIndex;
         	int count = 1;
@@ -309,8 +308,8 @@ public class Server {
         	out.println("begin");
         	String confirmation = in.readLine();
         	int length = Integer.parseInt(confirmation);
-        	System.out.println(length);
-        	System.out.println("\n");
+        	//System.out.println(length);
+        	//System.out.println("\n");
         	out.println("received");
         	
         	File newFile = new File(currentPath, fileName);
@@ -322,18 +321,18 @@ public class Server {
         	int total = 0;
         	int sizeReadFromSocket;
         	
-        	System.out.println("before while...\n");
+        	//System.out.println("before while...\n");
         	while (total != length) {
-        		System.out.println("in while...\n");
+        		//System.out.println("in while...\n");
         		sizeReadFromSocket = inn.read(bytesFromSocket);
         		fileWriter.write(bytesFromSocket, 0, sizeReadFromSocket);
         		total += sizeReadFromSocket;
         	}
         	fileWriter.flush();
-        	System.out.println("after while...\n");
+        	//System.out.println("after while...\n");
         	
         	
-        	System.out.println("done reading...");
+        	//System.out.println("done reading...");
         	
         	out.println("done");
         	
@@ -347,61 +346,47 @@ public class Server {
          * download command reads from file and writes bytes in socket.
          */
         private void executeDownloadCommand(String argument) throws IOException {
-        	/*
         	if (!Files.exists(Paths.get(currentPath + "/" + argument)) || Files.isDirectory(Paths.get(currentPath + "/" + argument))) {
-        		out.println("File does not exist in this directory.");
+        		out.println("The requested file does not exist.");
         		return;
         	}
         	
-        	File fileForServer = new File(currentPath + "/" + argument);
-        	FileInputStream fileInput = new FileInputStream(fileForServer);
+        	String confirmation = in.readLine();
+			if (!confirmation.equals("begin"))
+				return;
+
+			File fileForClient = new File(currentPath + "/" + argument);
+			int length = (int) fileForClient.length();
+			out.println(length);
+			confirmation = in.readLine();
+			if (!confirmation.equals("received"))
+				return;
+			
+        	FileInputStream fileInput = new FileInputStream(fileForClient);
         	BufferedInputStream inFromFile = new BufferedInputStream(fileInput);
-        	byte[] bytesReadFromFile = new byte[(int) fileForServer.length()];
+        	byte[] bytesReadFromFile = new byte[100];
         	int sizeReadFromFile;
-        	OutputStream outToSocket = socket.getOutputStream();
+        	int total = 0;
+        	BufferedOutputStream outt = new BufferedOutputStream(socket.getOutputStream());
         	
-        	while ((sizeReadFromFile = inFromFile.read(bytesReadFromFile)) > 0) {
-        		outToSocket.write(bytesReadFromFile, 0, sizeReadFromFile);
+        	while (total != length) {
+        		sizeReadFromFile = inFromFile.read(bytesReadFromFile);
+        		outt.write(bytesReadFromFile, 0, sizeReadFromFile);
+        		total += sizeReadFromFile;
         	}
+        	outt.flush();
         	
-        	outToSocket.flush();
+        	confirmation = in.readLine();
+        	if (!confirmation.equals("done")) {
+        		out.println("Problem with download command.\n");
+        	}
+        	else {
+        		out.println("Download successful.\n");
+        	}
+			
+        	
         	inFromFile.close();
         	fileInput.close();
-        	
-        	out.println("The file " + argument + " was successfully downloaded.");
-        	out.println(RESPONSE_END);
-        	*/
-        	ServerSocket listener;
-        	InetAddress locIP = InetAddress.getByName(ipAddr);
-        	listener = new ServerSocket();
-        	listener.setReuseAddress(true);
-        	listener.bind(new InetSocketAddress(locIP, 5555));
-        	Socket socket = listener.accept();
-        	
-        	if (!Files.exists(Paths.get(currentPath + "/" + argument)) || Files.isDirectory(Paths.get(currentPath + "/" + argument))) {
-        		out.println("File does not exist in this directory.");
-        		listener.close();
-        		return;
-        	}
-        	
-        	File fileForServer = new File(currentPath + "/" + argument);
-        	FileInputStream fileInput = new FileInputStream(fileForServer);
-        	BufferedInputStream inFromFile = new BufferedInputStream(fileInput);
-        	byte[] bytesReadFromFile = new byte[(int) fileForServer.length()];
-        	int sizeReadFromFile;
-        	OutputStream outToSocket = socket.getOutputStream();
-        	
-        	while ((sizeReadFromFile = inFromFile.read(bytesReadFromFile)) > 0) {
-        		outToSocket.write(bytesReadFromFile, 0, sizeReadFromFile);
-        	}
-        	
-        	outToSocket.flush();
-        	inFromFile.close();
-        	fileInput.close();
-        	listener.close();
-        	
-        	out.println("The file " + argument + " was successfully downloaded.");
-        	out.println(RESPONSE_END);
         }
         
         
