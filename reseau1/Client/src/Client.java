@@ -29,20 +29,29 @@ import javax.swing.JTextField;
 
 public class Client {
 	private static final String RESPONSE_END = "done";
+	private static final String BACK = "..";
+	private static final String INVALID_COMMAND = "invalid";
+	private static final String CD = "cd";
+	private static final String LS = "ls";
+	private static final String MKDIR = "mkdir";
+	private static final String DOWNLOAD = "download";
+	private static final String UPLOAD = "upload";
+	private static final String EXIT = "exit";
 	
 	//credit to Necronet for pattern : https://stackoverflow.com/questions/5667371/validate-ipv4-address-in-java
 	private static final Pattern IP_ADDR_PATTERN = Pattern.compile("^(([01]?\\d\\d?|2[0-4]\\d|25[0-5])\\.){3}([01]?\\d\\d?|2[0-4]\\d|25[0-5])$");
+	private static final int NB_DIGITS_IP_ADDRESS = 15;
+	private static final int NB_DIGITS_PORT = 4;
+	
 	private static BufferedReader in;
     private static PrintWriter out;
+    
     private JFrame frame = new JFrame("Capitalize Client");
     private JTextField dataField = new JTextField(40);
     private JTextArea messageArea = new JTextArea(8, 60);
     
-    private static String ipAddr;
-    
+    private static String ipAddr; 
     private static Socket socket;
-
-    private Thread readThread;
     
     public Client() {
 
@@ -61,16 +70,15 @@ public class Client {
             	
             	String[] command;
             	command = dataField.getText().split(" ");
-				if (command[0].equals("upload")) {
+				if (command[0].equals(UPLOAD)) {
 					try {
 						UploadThread upload = new UploadThread(command[1], messageArea, socket.getOutputStream());
 						upload.start();
 					} catch (IOException e1) {
-						// TODO Auto-generated catch block
 						e1.printStackTrace();
 					}
 				}
-				if (command[0].equals("download")) {
+				else if (command[0].equals(DOWNLOAD)) {
 					try {
 						DownloadThread download = new DownloadThread(command[1], messageArea, socket.getInputStream());
 						download.start();
@@ -79,13 +87,9 @@ public class Client {
 					}
 					
 				}
-				if (command[0].equals("ls") || command[0].equals("mkdir") || command[0].equals("cd")|| command[0].equals("exit")) {
-					try {
-						readThread = new ReadingThread(in, messageArea);
-						readThread.start();              	
-					} catch (Exception ex) {
-                       messageArea.append("Error: " + ex + "\n");
-					}
+				else {
+					ReadingThread readThread = new ReadingThread(in, messageArea);
+					readThread.start(); 
 				}
             }
         });
@@ -106,24 +110,19 @@ public class Client {
     	public void run() {
     		String response;
     		try {
-    			messageArea.append("reading thread starts\n");
+    			messageArea.append("start reading\n");
     			while (isReading) {
     				
     				response = in.readLine();
-    				if (response.equals(RESPONSE_END)) {
+    				if (response != null && response.equals(RESPONSE_END)) {
     					messageArea.append("\n");
     					isReading = false;
     				}
     				else {
     					messageArea.append(response + "\n");
-    				}			
+    				}
     			}
-    			messageArea.append("reading thread ends\n");
-    			
-    			while(in.ready()) {
-    				response = in.readLine();	
-    				messageArea.append(response + "\n");
-    			}		    				
+    			messageArea.append("stop reading\n");
     		} catch (IOException e) {
     			System.out.println("Error in reading thread for client");
     		}		
@@ -149,7 +148,6 @@ public class Client {
 
     			File fileForServer = new File("./" + fileName);
     			int length = (int) fileForServer.length();
-    			//messageArea.append(length + "\n");
     			out.println(length);
     			confirmation = in.readLine();
     			if (!confirmation.equals("received"))
@@ -162,15 +160,12 @@ public class Client {
             	int total = 0;
             	BufferedOutputStream outt = new BufferedOutputStream(outToSocket);
             	
-            	//messageArea.append("before while\n");
             	while (total != length) {
             		sizeReadFromFile = inFromFile.read(bytesReadFromFile);
-            		//messageArea.append("in while\n");
             		outt.write(bytesReadFromFile, 0, sizeReadFromFile);
             		total += sizeReadFromFile;
             	}
             	outt.flush();
-            	//messageArea.append("after while\n");
             	
             	confirmation = in.readLine();
             	if (!confirmation.equals("done")) {
@@ -248,7 +243,6 @@ public class Client {
 
 	public void connectToServer() throws IOException {
         int port;
-        String serverAddress;
         //Socket socket;
         // Java swing objects for information input box
         JPanel panel = new JPanel();
