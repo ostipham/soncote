@@ -5,7 +5,6 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.InetAddress;
@@ -25,9 +24,15 @@ import javax.swing.JPanel;
 import javax.swing.JTextField;
 
 public class Server {
-	private static final String RESPONSE_END = "done";
-	private static final String BACK = "..";
-	private static final String INVALID_COMMAND = "invalid";
+	//Client-Server confirmation messages
+	private static final String VALID_COMMAND = "command validated";
+	private static final String READY = "ready";
+	private static final String ABORT = "abort";
+	private static final String RECEIVED = "received";
+	private static final String DONE = "done";
+	
+	//commands
+	private static final String BACK = "..";	
 	private static final String CD = "cd";
 	private static final String LS = "ls";
 	private static final String MKDIR = "mkdir";
@@ -150,40 +155,35 @@ public class Server {
                 while (isThreadRunning) {
                     String input = in.readLine(); 
                     command = input.split(" ");
-                    
-                    //Checks the validity of command's number of words. Ex: If client command = ls, should be 1 word.
-                    if (!checkCommandValidity(command)) {
-                    	command[0] = INVALID_COMMAND;
-                    } else {
-                    	//if valid, print command in server console
+                    	
+                    if (checkCommandValidity(command)) {
                     	LocalDateTime date = LocalDateTime.now();
                     	log("[" + socket.getInetAddress().getHostAddress() + ":" + socket.getPort() + " - " + DATE_FORMAT.format(date) + "]: " + input);
+                    	switch(command[0]) {
+                    	case CD :
+                    		executeCdCommand(command[1]);
+                    		break;
+                    	case LS :
+                    		executeLsCommand();
+                    		break;
+                    	case MKDIR :
+                    		executeMkdirCommand(command[1]);
+                    		break;
+                    	case UPLOAD :
+                    		executeUploadCommand(command[1]);
+                    		break;
+                    	case DOWNLOAD :
+                    		executeDownloadCommand(command[1]);
+                    		break;
+                    	case EXIT :
+                    		executeExitCommand();
+                    		break;
+                    	default :
+                    		//shouldnt get here
+                    		out.println("There was a problem while executing your command.");
+                    	}
                     }
-                    	
                     
-                    switch(command[0]) {
-                    case CD :
-                    	executeCdCommand(command[1]);
-                    	break;
-                    case LS :
-                    	executeLsCommand();
-                    	break;
-                    case MKDIR :
-                    	executeMkdirCommand(command[1]);
-                    	break;
-                    case UPLOAD :
-                    	executeUploadCommand(command[1]);
-                    	break;
-                    case DOWNLOAD :
-                    	executeDownloadCommand(command[1]);
-                    	break;
-                    case EXIT :
-                    	executeExitCommand();
-                    	break;
-                    default :
-                    	out.println("That is not a valid command. Please enter a valid command.");
-                    	out.println(RESPONSE_END);
-                    }
                     command = null;
                 }
             } catch (IOException e) {
@@ -205,13 +205,66 @@ public class Server {
         }
         
         private boolean checkCommandValidity(String[] command) {
-        	if (command[0].equals(LS) || command[0].equals(EXIT))
-        		return (command.length == 1);
+        	boolean isValid = true;
         	
-        	if (command[0].equals(MKDIR) || command[0].equals(CD) || command[0].equals(UPLOAD) || command[0].equals(DOWNLOAD))
-        		return (command.length == 2);
+        	if (command[0].equals(LS) || command[0].equals(EXIT)) {
+        		if (command.length != 1) {
+        			out.println("This command should only be one word.");
+        			isValid = false;
+        		}
+        	}
+        	
+        	if (command[0].equals(MKDIR)) {
+        		if (command.length != 2) {
+        			out.println("This command should be composed of two words.");
+        			isValid = false;
+        		}
+        		else if (Files.exists(Paths.get(currentPath + "/" + command[1])) && Files.isDirectory(Paths.get(currentPath + "/" + command[1]))) {
+            		out.println("There is already a subdirectory with that name.");
+            		isValid = false;
+            	}
+        	}
+        	
+        	if (command[0].equals(CD)) {
+        		if (command.length != 2) {
+        			out.println("This command should be composed of two words.");
+        			isValid = false;
+        		}
+        		else if (command[1].equals(BACK) && currentPath.equals(ROOT_DIRECTORY_NAME)) {
+            		out.println("Root folder has no parent.");
+            		isValid = false;
+            	}
+        		else if (!Files.exists(Paths.get(currentPath + "/" + command[1])) || !Files.isDirectory(Paths.get(currentPath + "/" + command[1]))) {
+            		//check if file exists and is a folder
+            		out.println("Could not find a sub directory called " + command[1]);
+            		isValid = false;
+            	}
+        	}
+
+        	if (command[0].equals(UPLOAD)) {
+        		//upload verification is done client side
+        	}
+        	
+        	if (command[0].equals(DOWNLOAD)) {
+        		if (command.length != 2) {
+        			out.println("This command should be composed of two words.");
+        			isValid = false;
+        		}
+        		else if (!Files.exists(Paths.get(currentPath + "/" + command[1])) || Files.isDirectory(Paths.get(currentPath + "/" + command[1]))) {
+        			out.println("File does no exist.");
+        			isValid = false;
+        		}
+        	}
+        	
+        	if (!command[0].equals(CD) && !command[0].equals(LS) && !command[0].equals(MKDIR) && 
+        			!command[0].equals(EXIT) && !command[0].equals(UPLOAD) && !command[0].equals(DOWNLOAD)) {
+        		out.println("This is not a valid command.");
+        		isValid = false;
+        	}
         		
-        	return false;
+        	if (isValid)
+        		out.println(VALID_COMMAND);
+        	return isValid;
         }
         
         
@@ -220,24 +273,16 @@ public class Server {
          * Changes currentPath to entered directory.
          */
         private void executeCdCommand(String argument) {
-        	log(argument + "\n");
-        	// command cd .. -> backing up to parent directory (if possible). Not possible from root directory.
-        	if (argument.equals(BACK) && currentPath.equals(ROOT_DIRECTORY_NAME)) {
-        		out.println("Root folder has no parent.");
-        	} else if (argument.equals(BACK)) {
-        		log("in .. possible if\n");
-        		currentPath = (currentPath.lastIndexOf("/", 0) != -1)?
-        				currentPath.substring(0, currentPath.lastIndexOf("/", 0)) : ROOT_DIRECTORY_NAME; 
-        		out.println("You are in " + currentPath + " folder.");
-        	} else if (!Files.exists(Paths.get(currentPath + "/" + argument)) || !Files.isDirectory(Paths.get(currentPath + "/" + argument))) {
-        		//check if file exists and is a folder
-        		out.println("Could not find a sub directory called " + argument);
-        	} else {
-        		currentPath = currentPath + "/" + argument;
-        		out.println("You are in " + currentPath + " folder.");
+        	if (argument.equals(BACK)) {
+        		currentPath = (currentPath.lastIndexOf("/", currentPath.length()) != -1)?
+        				currentPath.substring(0, currentPath.lastIndexOf("/", currentPath.length())) : ROOT_DIRECTORY_NAME; 
+        	} 
+        	else {
+        		currentPath = currentPath + "/" + argument;     		
         	}
-
-        	out.println(RESPONSE_END);
+        	
+        	out.println(1); //send number of lines for response
+        	out.println("You are in " + currentPath + " folder.");
         }
         
         
@@ -258,6 +303,10 @@ public class Server {
         		}	
         	}
 
+        	//get number of response lines to send to client
+        	int nbLines = fileNames.size() + directoryNames.size();
+        	out.println(nbLines); //send number of lines for response
+        	
         	// send to client
         	for (String name: directoryNames) {
         		out.println("[Folder] " + name);
@@ -265,8 +314,6 @@ public class Server {
         	for (String name: fileNames) {
         		out.println("[File] " + name);
         	}
-        	
-        	out.println(RESPONSE_END);
         }
 
         
@@ -274,60 +321,64 @@ public class Server {
          * mkdir command checks if name is valid and if sub-directory doesn't exist then creates sub-directory.
          */
         private void executeMkdirCommand(String argument) throws IOException {
-        	//check if a folder with this name already exists
-        	if (Files.exists(Paths.get(currentPath + "/" + argument)) && Files.isDirectory(Paths.get(currentPath + "/" + argument))) {
-        		out.println("There is already a subdirectory with that name.");
-        	} else {
-        		//Conditions cleared. Creating new directory in current one.
-        		Files.createDirectory(Paths.get(currentPath + "/" + argument));
-        		out.println("Folder " + argument + " was successfully created.");
-        	}
-        	
-        	out.println(RESPONSE_END);
+        	Files.createDirectory(Paths.get(currentPath + "/" + argument));
+        	out.println(1); //send number of lines for response
+        	out.println("Folder " + argument + " was successfully created.");
         }
         
         
         /*
          * upload command renames if already existing file present, reads from socket and write in file.
          */
-        private void executeUploadCommand(String argument) throws IOException {     	  	
-        	String fileName = argument;
-        	int substringIndex;
-        	int count = 1;
+        private void executeUploadCommand(String argument) {
+        	try {
+        		String fileName = argument;
+        		int substringIndex;
+        		int count = 1;
         	    	
-        	//if file already in, register second time as fileName(1).pdf, fileName(2).pdf, etc.
-        	if (Files.exists(Paths.get(currentPath + "/" + fileName)) && !Files.isDirectory(Paths.get(currentPath + "/" + fileName))) {
-        		substringIndex = fileName.indexOf(".", 0);
-        		fileName = fileName.substring(0, substringIndex) + "(" + count + ")" + fileName.substring(substringIndex, fileName.length());
-        	}
-        	while (Files.exists(Paths.get(currentPath + "/" + fileName)) && !Files.isDirectory(Paths.get(currentPath + "/" + fileName))) {
-        		fileName = fileName.replace("(" + count + ")", "(" + ++count + ")");
-        	}
+        		//if file already in, register second time as fileName(1).pdf, fileName(2).pdf, etc.
+        		if (Files.exists(Paths.get(currentPath + "/" + fileName)) && !Files.isDirectory(Paths.get(currentPath + "/" + fileName))) {
+        			substringIndex = fileName.indexOf(".", 0);
+        			fileName = fileName.substring(0, substringIndex) + "(" + count + ")" + fileName.substring(substringIndex, fileName.length());
+        		}
+        		while (Files.exists(Paths.get(currentPath + "/" + fileName)) && !Files.isDirectory(Paths.get(currentPath + "/" + fileName))) {
+        			fileName = fileName.replace("(" + count + ")", "(" + ++count + ")");
+        		}
         	
-        	out.println("begin");
-        	String confirmation = in.readLine();
-        	int length = Integer.parseInt(confirmation);
-        	out.println("received");
+        		//confirm ready to begin
+        		out.println(READY); 
         	
-        	File newFile = new File(currentPath, fileName);
-        	FileOutputStream fileOutput = new FileOutputStream(newFile);
-        	BufferedOutputStream fileWriter = new BufferedOutputStream(fileOutput);
-        	InputStream inFromSocket = socket.getInputStream();
-        	BufferedInputStream inn = new BufferedInputStream(inFromSocket);
-        	byte[] bytesFromSocket = new byte[100];
-        	int total = 0;
-        	int sizeReadFromSocket;
+        		//wait for file length and confirm reception
+        		String confirmation = in.readLine();
+        		if (confirmation.equals(ABORT)) {
+        			return;
+        		}
+        		int length = 0;
+        		length = Integer.parseInt(confirmation);	
+        		out.println(RECEIVED);
         	
-        	while (total != length) {
-        		sizeReadFromSocket = inn.read(bytesFromSocket);
-        		fileWriter.write(bytesFromSocket, 0, sizeReadFromSocket);
-        		total += sizeReadFromSocket;
-        	}
-        	fileWriter.flush();
+        		//prepare file and streams
+        		File newFile = new File(currentPath, fileName);
+        		BufferedOutputStream fileWriter = new BufferedOutputStream(new FileOutputStream(newFile));
+        		BufferedInputStream inFromSocket = new BufferedInputStream(socket.getInputStream());
+        		byte[] bytesFromSocket = new byte[length];
+        		int total = 0;
+        		int sizeReadFromSocket;
+        	
+        		//read from socket loop
+        		while (total != length) {
+        			sizeReadFromSocket = inFromSocket.read(bytesFromSocket);
+        			fileWriter.write(bytesFromSocket, 0, sizeReadFromSocket);
+        			total += sizeReadFromSocket;
+        		}
+        		fileWriter.flush();
 
-        	out.println(RESPONSE_END);	
-        	fileWriter.close();
-        	fileOutput.close();
+        		out.println(DONE);	
+        		fileWriter.close();  	
+        	} catch(Exception e) {
+        		out.println(ABORT);
+        		return;
+        	}
         	
         }
         
@@ -335,14 +386,8 @@ public class Server {
         /*
          * download command reads from file and writes bytes in socket.
          */
-        private void executeDownloadCommand(String argument) throws IOException {
-        	if (!Files.exists(Paths.get(currentPath + "/" + argument)) || Files.isDirectory(Paths.get(currentPath + "/" + argument))) {
-        		out.println("The requested file does not exist.");
-        		out.println(RESPONSE_END);	
-        		return;
-        	}
-        	
-        	String confirmation = in.readLine();
+        private void executeDownloadCommand(String argument) {     	
+        	/*String confirmation = in.readLine();
 			if (!confirmation.equals("begin"))
 				return;
 
@@ -377,7 +422,48 @@ public class Server {
 			
         	out.println(RESPONSE_END);
         	inFromFile.close();
-        	fileInput.close();
+        	fileInput.close();*/
+        	try {	
+    			//wait for confirmation
+    			String confirmation = in.readLine(); 
+    			if (!confirmation.equals(READY)) {
+    				out.println(ABORT);
+    				return;
+    			}
+    				
+    			//send file length to server and wait for confirmation
+    			File fileForClient = new File(currentPath + "/" + argument);
+    			int length = (int) fileForClient.length();
+    			out.println(length);
+    			confirmation = in.readLine();
+    			if (!confirmation.equals(RECEIVED)) {
+    				out.println(ABORT);
+    				return;
+    			}
+    				
+    			
+    			//prepare file and streams
+            	BufferedInputStream inFromFile = new BufferedInputStream(new FileInputStream(fileForClient));
+            	byte[] bytesReadFromFile = new byte[length];
+            	int sizeReadFromFile;
+            	int total = 0;
+            	BufferedOutputStream outToSocket = new BufferedOutputStream(socket.getOutputStream());
+            	
+            	//send to server loop
+            	while (total != length) {
+            		sizeReadFromFile = inFromFile.read(bytesReadFromFile);
+            		outToSocket.write(bytesReadFromFile, 0, sizeReadFromFile);
+            		total += sizeReadFromFile;
+            	}
+            	outToSocket.flush();
+    			
+            	//close file stream
+            	inFromFile.close();
+            	
+    		} catch (Exception e) {
+    			out.println(ABORT);
+    			return;
+    		}
         }
         
         
@@ -385,6 +471,7 @@ public class Server {
          * Closing connection with client.
          */
         private void executeExitCommand() throws IOException {
+        	out.println(1); //send number of lines for response
         	out.println("Closing connection to server for client " + clientNumber);
         	out.close();
         	in.close();
